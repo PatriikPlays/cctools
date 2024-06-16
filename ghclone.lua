@@ -29,6 +29,20 @@ local function errorf(...)
     error(string.format(...))
 end
 
+local function split(str, sep)
+    sep = sep or "%s"
+    local ret, index = {}, 1
+    for match in string.gmatch(str, "([^"..sep.."]+)") do
+        ret[index] = match
+        index = index + 1
+    end
+    return ret
+end
+
+local function canonicalizePath(path)
+  return "/"..table.concat(split(path, "/"), "/")
+end
+
 local function fetchDirectoryContents(owner, repo, path, branch)
   local url = string.format("https://api.github.com/repos/%s/%s/contents/%s?ref=%s", owner, repo, path or "", branch)
   local response, errCode, err = http.get(url)
@@ -100,33 +114,17 @@ local function indexRepo(owner, repo, repoPath, branch, files, dirs)
     return files,dirs
 end
 
---[[
-local function downloadRepoContents(owner, repo, repoPath, localPath, branch)
-  local contents = fetchDirectoryContents(owner, repo, repoPath, branch)
-  for _, item in pairs(contents) do
-    if item.type == "file" then
-      print("Downloading " .. item.path)
-      downloadFile(item.download_url, fs.combine(localPath, item.path))
-    elseif item.type == "dir" then
-      local newLocalPath = fs.combine(localPath, item.path)
-      if not fs.exists(newLocalPath) then
-        fs.makeDir(newLocalPath)
-      end
-
-      downloadRepoContents(owner, repo, item.path, newLocalPath, branch)
-    end
-  end
-end
---]]
-
 local function downloadRepoContents(owner, repo, repoPath, localPath, branch, maxParallel)
-    -- repoPath partially broken!!
+    repoPath = canonicalizePath(repoPath)
+    localPath = canonicalizePath(localPath)
     fs.makeDir(localPath)
 
     local files, dirs = indexRepo(owner, repo, repoPath, branch)
 
     for _,v in ipairs(dirs) do
-        fs.makeDir(fs.combine(localPath, v))
+        local path = canonicalizePath(v)
+        path = path:sub(#repoPath+1, #path)
+        fs.makeDir(fs.combine(localPath, path))
     end
 
     local index = {}
@@ -146,7 +144,9 @@ local function downloadRepoContents(owner, repo, repoPath, localPath, branch, ma
                 table.remove(index, 1)
 
                 printf("Downloading %s", file)
-                downloadFile(files[file], fs.combine(localPath, file))
+                local path = canonicalizePath(file)
+                path = path:sub(#repoPath+1, #path)
+                downloadFile(files[file], fs.combine(localPath, path))
             end
         end
     end
@@ -166,14 +166,14 @@ local function clone(owner, repo, repoPath, localPath, branch, maxParallel)
     end
 end
 
-local owner, repo, localPath, branch, maxParallel = ...
+local owner, repo, localPath, repoPath, branch, maxParallel = ...
 
 maxParallel = tonumber(maxParallel or 4) or 4
 branch = branch or "main"
 
 if not (owner and repo and localPath) then
-    printError("Usage: ghclone.lua <owner> <repo> <localPath> <branch> <maxParallel>")
+    printError("Usage: ghclone.lua <owner> <repo> <localPath> <repoPath> <branch> <maxParallel>")
     return
 end
 
-clone(owner, repo, "/", localPath, branch, maxParallel)
+clone(owner, repo, repoPath, localPath, branch, maxParallel)
