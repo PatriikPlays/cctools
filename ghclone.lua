@@ -170,6 +170,7 @@ local owner, repo, localPath, repoPath, branch, maxParallel = ...
 
 maxParallel = tonumber(maxParallel or 4) or 4
 branch = branch or "main"
+repoPath = repoPath or "/"
 
 if not (owner and repo and localPath) then
     printError("Usage: ghclone.lua <owner> <repo> <localPath> <repoPath> <branch> <maxParallel>")
